@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Catedral Infinita — vitrales de tu propia luz</title>
+<style>
+  :root{
+    --ink:#0b0a10;
+    --parchment:#ddd5c3;
+    --parchment-dim:rgba(221,213,195,.55);
+    --amber:#d9a441;
+    --amber-soft:rgba(217,164,65,.85);
+    --hairline:rgba(221,213,195,.14);
+    --panel:rgba(11,9,17,.58);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--ink)}
+  body{font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--parchment)}
+  body.nocursor{cursor:none}
+  canvas#gl{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+
+  /* ---------- panel ---------- */
+  #panel{
+    position:fixed;top:22px;right:22px;width:262px;z-index:10;
+    background:var(--panel);
+    -webkit-backdrop-filter:blur(16px) saturate(130%);
+    backdrop-filter:blur(16px) saturate(130%);
+    border:1px solid var(--hairline);
+    border-radius:16px;padding:18px 18px 14px;
+    box-shadow:0 12px 40px rgba(0,0,0,.45);
+    transition:opacity .8s ease, transform .5s cubic-bezier(.2,.8,.2,1);
+  }
+  #panel.hidden{opacity:0;pointer-events:none;transform:translateX(14px)}
+  #panel.idle{opacity:.12}
+  #panel:hover{opacity:1 !important}
+  #panel h1{
+    font-family:Palatino,"Palatino Linotype","Book Antiqua",Georgia,serif;
+    font-size:15px;font-weight:500;letter-spacing:.34em;text-transform:uppercase;
+    color:var(--parchment);text-align:center;margin-bottom:2px;
+  }
+  #panel .sub{
+    text-align:center;font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--parchment-dim);margin-bottom:14px;
+  }
+  .divider{height:1px;background:var(--hairline);margin:12px -18px}
+
+  /* ambience chips */
+  .chips{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:2px}
+  .chip{
+    appearance:none;border:1px solid var(--hairline);background:rgba(255,255,255,.03);
+    color:var(--parchment-dim);border-radius:9px;padding:7px 4px;font-size:11px;
+    letter-spacing:.06em;cursor:pointer;transition:all .3s ease;font-family:inherit;
+  }
+  .chip:hover{border-color:rgba(217,164,65,.5);color:var(--parchment)}
+  .chip.active{border-color:var(--amber-soft);color:var(--amber);background:rgba(217,164,65,.08)}
+  .chip:focus-visible{outline:1px solid var(--amber);outline-offset:2px}
+
+  /* sliders */
+  .ctrl{margin:11px 0 0}
+  .ctrl label{
+    display:flex;justify-content:space-between;font-size:10.5px;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--parchment-dim);margin-bottom:5px;
+  }
+  .ctrl label .val{color:var(--amber);letter-spacing:0;font-variant-numeric:tabular-nums}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:rgba(221,213,195,.2);border-radius:2px}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:12px;height:12px;border-radius:50%;
+    background:radial-gradient(circle at 35% 35%, #f4d489, var(--amber));
+    margin-top:-5px;box-shadow:0 0 8px rgba(217,164,65,.5);
+    transition:transform .15s ease;
+  }
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.25)}
+  input[type=range]::-moz-range-track{height:2px;background:rgba(221,213,195,.2);border-radius:2px}
+  input[type=range]::-moz-range-thumb{
+    width:12px;height:12px;border:none;border-radius:50%;
+    background:radial-gradient(circle at 35% 35%, #f4d489, var(--amber));
+    box-shadow:0 0 8px rgba(217,164,65,.5);
+  }
+  input[type=range]:focus-visible{outline:1px solid var(--amber);outline-offset:2px;border-radius:4px}
+
+  /* action buttons */
+  .actions{display:flex;gap:7px;margin-top:13px}
+  .btn{
+    flex:1;display:block;text-align:center;border:1px solid var(--hairline);
+    background:rgba(255,255,255,.03);color:var(--parchment-dim);border-radius:9px;
+    padding:8px 4px;font-size:11px;letter-spacing:.05em;cursor:pointer;
+    transition:all .3s ease;font-family:inherit;appearance:none;
+  }
+  .btn:hover{border-color:rgba(217,164,65,.5);color:var(--parchment)}
+  .btn.on{border-color:var(--amber-soft);color:var(--amber);background:rgba(217,164,65,.08)}
+  .btn:focus-visible{outline:1px solid var(--amber);outline-offset:2px}
+  #fileIn{display:none}
+  #photoState{
+    display:none;justify-content:space-between;align-items:center;
+    font-size:10.5px;color:var(--parchment-dim);margin-top:8px;
+  }
+  #photoState.show{display:flex}
+  #resetPhoto{background:none;border:none;color:var(--amber);cursor:pointer;font-size:10.5px;
+    letter-spacing:.05em;padding:2px 4px;font-family:inherit}
+  #resetPhoto:hover{text-decoration:underline}
+
+  .keys{
+    margin-top:13px;font-size:10px;line-height:1.7;color:rgba(221,213,195,.4);
+    letter-spacing:.03em;text-align:center;
+  }
+  .keys b{color:rgba(221,213,195,.65);font-weight:500}
+
+  /* ---------- hint ---------- */
+  #hint{
+    position:fixed;bottom:34px;left:50%;transform:translateX(-50%);z-index:9;
+    font-family:Palatino,"Palatino Linotype",Georgia,serif;font-size:13px;
+    letter-spacing:.22em;text-transform:uppercase;color:rgba(221,213,195,.6);
+    text-shadow:0 1px 12px rgba(0,0,0,.8);pointer-events:none;
+    opacity:0;animation:hintIn 1.6s ease .8s forwards;transition:opacity 1.5s ease;
+    text-align:center;padding:0 20px;
+  }
+  #hint.gone{opacity:0 !important}
+  @keyframes hintIn{to{opacity:1}}
+
+  #err{
+    position:fixed;inset:0;display:none;place-items:center;z-index:20;
+    background:var(--ink);color:var(--parchment);text-align:center;padding:30px;
+    font-family:Georgia,serif;font-size:15px;line-height:1.7;
+  }
+
+  @media (max-width:560px){
+    #panel{width:calc(100vw - 28px);right:14px;top:14px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    #panel,#hint,.chip,.btn{transition:none;animation:none;opacity:1}
+  }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<aside id="panel" aria-label="Controles">
+  <h1>Catedral&nbsp;∞</h1>
+  <div class="sub">vitrales de tu propia luz</div>
+
+  <div class="chips" id="chips">
+    <button class="chip" data-p="0">Amanecer</button>
+    <button class="chip active" data-p="1">Medianoche</button>
+    <button class="chip" data-p="2">Ámbar</button>
+    <button class="chip" data-p="3">Etéreo</button>
+  </div>
+
+  <div class="ctrl">
+    <label>Velocidad de vuelo <span class="val" id="vSpeed">1.6</span></label>
+    <input type="range" id="sSpeed" min="0" max="8" step="0.1" value="1.6">
+  </div>
+  <div class="ctrl">
+    <label>Luz de vitral <span class="val" id="vGlass">1.2</span></label>
+    <input type="range" id="sGlass" min="0" max="2.5" step="0.05" value="1.2">
+  </div>
+  <div class="ctrl">
+    <label>Niebla <span class="val" id="vFog">1.0</span></label>
+    <input type="range" id="sFog" min="0" max="2.5" step="0.05" value="1">
+  </div>
+  <div class="ctrl">
+    <label>Ciclo de color <span class="val" id="vCyc">0.25</span></label>
+    <input type="range" id="sCyc" min="0" max="2" step="0.05" value="0.25">
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="actions">
+    <label class="btn" for="fileIn">Subir foto al vitral</label>
+    <input type="file" id="fileIn" accept="image/*">
+    <button class="btn" id="micBtn">Micrófono</button>
+  </div>
+  <div id="photoState"><span>Vitral: tu foto</span><button id="resetPhoto">restaurar</button></div>
+
+  <p class="keys">
+    <b>ratón</b> mirar · <b>rueda</b> velocidad · <b>WASD</b> moverse<br>
+    <b>espacio</b> pausa · <b>F</b> pantalla completa · <b>H</b> panel
+  </p>
+</aside>
+
+<div id="hint">Mueve el ratón para mirar · gira la rueda para volar</div>
+<div id="err"><div>Este navegador no puede iniciar WebGL.<br>Prueba con una versión reciente de Chrome, Edge o Firefox.</div></div>
+
+<script>
+"use strict";
+/* ============================================================
+   CATEDRAL INFINITA
+   Raymarching de una catedral gótica fractal (SDF) en WebGL puro.
+   Un solo archivo. Sin dependencias.
+   ============================================================ */
+
+const VERT = `
+attribute vec2 aPos;
+void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }
+`;
+
+const FRAG = `
+precision highp float;
+
+uniform vec2  uRes;
+uniform float uTime;
+uniform vec3  uPos;
+uniform vec2  uYP;      // yaw, pitch
+uniform float uRoll;
+uniform float uGlass;   // intensidad vitral
+uniform float uFogD;    // densidad de niebla
+uniform float uCyc;     // fase del ciclo de color
+uniform float uAudio;   // nivel de micrófono suavizado
+uniform float uExpo;
+uniform vec3  uFogCol;
+uniform vec3  uLightCol;
+uniform vec3  uAmbCol;
+uniform vec3  uTint;    // color medio de la foto
+uniform sampler2D uTex;
+
+#define BAY 6.0
+#define PI 3.14159265359
+#define MAXD 70.0
+
+float gGlass; // distancia al vidrio (para el glow volumétrico)
+
+/* arco apuntado gótico: q = (|lateral|, altura). negativo = interior */
+float arch2(vec2 q, float w, float sh, float c){
+  float R = w + c;
+  float d = length(vec2(q.x + c, max(q.y - sh, 0.0))) - R;
+  return max(d, -q.y);
+}
+
+vec2 map(vec3 p){
+  float ax = abs(p.x);
+  float y  = p.y;
+  float bi = floor(p.z / BAY);
+  float zc = p.z - (bi + 0.5) * BAY;
+  float isRose = 1.0 - min(mod(bi, 4.0), 1.0);
+
+  /* nave central + bóvedas apuntadas anidadas (recesión fractal) */
+  float carve = arch2(vec2(ax, y), 2.4, 3.0, 1.3);
+  float s = 1.0; float yb = 0.0;
+  for(int i = 0; i < 3; i++){
+    yb += 3.0 * s;
+    s  *= 0.55;
+    carve = min(carve, arch2(vec2(ax / s, (y - yb) / s), 2.4, 3.0, 1.3) * s);
+  }
+
+  /* naves laterales */
+  carve = min(carve, arch2(vec2(abs(ax - 3.9), y), 1.1, 2.0, 0.6));
+
+  /* arquerías entre nave y laterales (dejan los pilares) */
+  float arc = arch2(vec2(abs(zc), y), 1.7, 1.9, 0.8);
+  carve = min(carve, max(arc, abs(ax - 2.6) - 0.35));
+
+  /* ventanales: lancetas gemelas o rosetón cada 4 tramos */
+  float wLan  = arch2(vec2(abs(abs(zc) - 1.25), y - 3.1), 0.62, 1.15, 0.4);
+  float wRose = length(vec2(zc, y - 4.1)) - 1.35;
+  float wgl   = mix(wLan, wRose, isRose);
+  carve = min(carve, max(wgl, abs(ax - 2.35) - 0.75));
+
+  float stone = -carve;
+
+  /* relieve de pliegue tipo Menger: tracería tallada en la piedra */
+  vec3 rp = p * 1.6; float rs = 1.6;
+  for(int i = 0; i < 2; i++){
+    vec3 a = abs(mod(rp, 2.0) - 1.0);
+    float cr = min(max(a.x, a.y), min(max(a.y, a.z), max(a.x, a.z))) - 0.34;
+    float cap = 0.08 / rs;
+    stone = max(stone, min(-cr / rs, stone + cap));
+    rp *= 3.0; rs *= 3.0;
+  }
+
+  /* paño de vidrio dentro del hueco */
+  float glass = max(wgl + 0.06, abs(ax - 2.62) - 0.035);
+  gGlass = glass;
+
+  if(glass < stone) return vec2(glass, 1.0);
+  return vec2(stone, 0.0);
+}
+
+vec3 calcN(vec3 p){
+  vec2 e = vec2(0.0016, -0.0016);
+  return normalize(
+    e.xyy * map(p + e.xyy).x +
+    e.yyx * map(p + e.yyx).x +
+    e.yxy * map(p + e.yxy).x +
+    e.xxx * map(p + e.xxx).x);
+}
+
+float calcAO(vec3 p, vec3 n){
+  float o = 0.0, s = 1.0;
+  for(int i = 1; i <= 4; i++){
+    float h = 0.04 + 0.09 * float(i);
+    o += (h - map(p + n * h).x) * s;
+    s *= 0.6;
+  }
+  return clamp(1.0 - 1.8 * o, 0.0, 1.0);
+}
+
+float hash13(vec3 p){
+  p = fract(p * 0.1031);
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+
+float vnoise(vec3 x){
+  vec3 i = floor(x), f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash13(i);
+  float b = hash13(i + vec3(1,0,0));
+  float c = hash13(i + vec3(0,1,0));
+  float d = hash13(i + vec3(1,1,0));
+  float e = hash13(i + vec3(0,0,1));
+  float g = hash13(i + vec3(1,0,1));
+  float h = hash13(i + vec3(0,1,1));
+  float k = hash13(i + vec3(1,1,1));
+  return mix(mix(mix(a,b,f.x), mix(c,d,f.x), f.y),
+             mix(mix(e,g,f.x), mix(h,k,f.x), f.y), f.z);
+}
+
+vec3 hueShift(vec3 col, float a){
+  const vec3 k = vec3(0.57735026919);
+  float ca = cos(a);
+  return col * ca + cross(k, col) * sin(a) + k * dot(k, col) * (1.0 - ca);
+}
+
+void main(){
+  vec2 sc = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
+  float crl = cos(uRoll), srl = sin(uRoll);
+  sc = mat2(crl, -srl, srl, crl) * sc;
+
+  vec3 rd = normalize(vec3(sc, 1.15));
+  float cp = cos(uYP.y), sp = sin(uYP.y);
+  rd.yz = mat2(cp, -sp, sp, cp) * rd.yz;
+  float cy = cos(uYP.x), sy = sin(uYP.x);
+  rd.xz = mat2(cy, -sy, sy, cy) * rd.xz;
+  vec3 ro = uPos;
+
+  float jit = hash13(vec3(gl_FragCoord.xy, fract(uTime) * 7.0));
+  float t = 0.02 + 0.05 * jit;
+  float m = -1.0;
+  float glow = 0.0;
+
+  for(int i = 0; i < 100; i++){
+    vec3 pos = ro + rd * t;
+    vec2 h = map(pos);
+    glow += clamp(h.x, 0.001, 0.35) / (1.0 + gGlass * gGlass * 22.0);
+    if(h.x < max(0.001 * t, 0.0006)){ m = h.y; break; }
+    t += h.x * 0.85;
+    if(t > MAXD) break;
+  }
+
+  float cycA = uCyc;
+  vec3 tint = hueShift(uTint, cycA);
+  vec3 lcol = hueShift(uLightCol, cycA * 0.5);
+  vec3 fcol = hueShift(uFogCol, cycA * 0.6) + tint * 0.12;
+  vec3 col;
+
+  if(m < -0.5){
+    col = fcol * (0.85 + 0.35 * sc.y);
+  } else {
+    vec3 p = ro + rd * t;
+    vec3 n = calcN(p);
+    float bi = floor(p.z / BAY);
+    float zc = p.z - (bi + 0.5) * BAY;
+    float isRose = 1.0 - min(mod(bi, 4.0), 1.0);
+    float ax = abs(p.x);
+    float fogMul = 1.0;
+
+    if(m > 0.5){
+      /* ---- VITRAL ---- */
+      vec3 tx; float lead; float edge;
+      if(isRose > 0.5){
+        vec2 q = vec2(zc, p.y - 4.1);
+        float r = length(q) / 1.35;
+        /* la imagen se proyecta directa sobre el roseton, sin plegado */
+        vec2 uv = q / 2.7 + 0.5;
+        tx = texture2D(uTex, uv).rgb;
+        float ang = atan(q.y, q.x + 0.0001);
+        float dr = abs(fract(r * 3.0) - 0.5) / 3.0;
+        float da = abs(mod(ang, PI / 6.0) - PI / 12.0) * max(r, 0.001) * 1.35;
+        lead = smoothstep(0.003, 0.014, dr) * smoothstep(0.004, 0.016, da);
+        edge = smoothstep(1.0, 0.95, r);
+      } else {
+        /* cada lanceta muestra la imagen completa, proporcion 1:1 (cover) */
+        float side = (zc < 0.0) ? -1.0 : 1.0;
+        vec2 uv = vec2((abs(zc) - 1.25) * side, p.y - 4.15) / 2.15 + 0.5;
+        tx = texture2D(uTex, uv).rgb;
+        float gx = abs(fract(uv.x * 4.0) - 0.5) / 4.0;
+        float gy = abs(fract(uv.y * 6.0) - 0.5) / 6.0;
+        lead = smoothstep(0.002, 0.010, min(gx, gy));
+        float w2 = arch2(vec2(abs(abs(zc) - 1.25), p.y - 3.1), 0.62, 1.15, 0.4);
+        edge = smoothstep(-0.015, -0.07, w2);
+      }
+      /* el emplomado oscurece las juntas sin borrar la imagen */
+      float cane = mix(0.12, 1.0, lead) * edge;
+      vec3 em = hueShift(pow(tx, vec3(1.08)) * cane, cycA);
+      col = em * (1.15 * uGlass) * (1.0 + uAudio * 1.5) + vec3(0.015, 0.014, 0.02);
+      float fres = pow(clamp(1.0 + dot(rd, n), 0.0, 1.0), 3.0);
+      col += lcol * fres * 0.08;
+      fogMul = 0.55;
+    } else {
+      /* ---- PIEDRA ---- */
+      float nse = vnoise(p * 2.3) * 0.65 + vnoise(p * 7.5) * 0.35;
+      vec3 alb = vec3(0.50, 0.46, 0.41) * (0.72 + 0.5 * nse);
+      if(n.y > 0.8 && p.y < 0.4){
+        float ch = mod(floor(p.x * 1.05) + floor(p.z * 1.05), 2.0);
+        alb = mix(vec3(0.26, 0.245, 0.235), vec3(0.5, 0.47, 0.43), ch) * (0.8 + 0.35 * nse);
+      }
+      vec3 L = normalize(vec3(0.45, 0.8, 0.3));
+      float dif = clamp(dot(n, L), 0.0, 1.0);
+      float ao = calcAO(p, n);
+      /* luz coloreada que entra por los ventanales, con los tonos de la foto */
+      vec3 Ld = normalize(vec3(sign(p.x + 0.0001) * 0.8, 0.55, 0.0));
+      float facing = clamp(dot(n, Ld), 0.0, 1.0);
+      vec2 duv = fract(vec2(p.z * 0.11 + p.y * 0.04, p.y * 0.2 + ax * 0.08));
+      vec3 dap = texture2D(uTex, duv).rgb;
+      vec3 tl = mix(tint, vec3(1.0), 0.2);
+      col = alb * (uAmbCol * (0.55 + 0.45 * n.y)
+                 + lcol * dif * 0.85
+                 + tl * dap * facing * (0.55 * uGlass)) * ao;
+      vec3 hv = normalize(L - rd);
+      col += lcol * pow(clamp(dot(n, hv), 0.0, 1.0), 28.0) * 0.12 * ao;
+    }
+
+    float fo = (1.0 - exp(-t * uFogD)) * fogMul;
+    col = mix(col, fcol, fo);
+  }
+
+  /* glow volumétrico alrededor de los vitrales */
+  col += mix(tint, lcol, 0.35) * glow * 0.045 * (0.5 + 0.6 * uGlass) * (1.0 + uAudio * 0.8);
+
+  /* tonemapping + viñeta + grano */
+  col *= uExpo;
+  col = clamp((col * (2.51 * col + 0.03)) / (col * (2.43 * col + 0.59) + 0.14), 0.0, 1.0);
+  vec2 vq = gl_FragCoord.xy / uRes - 0.5;
+  col *= 1.0 - 0.55 * dot(vq, vq);
+  col += (hash13(vec3(gl_FragCoord.xy, fract(uTime) * 13.0)) - 0.5) * 0.012;
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+/* ============================ WebGL ============================ */
+const canvas = document.getElementById("gl");
+const gl = canvas.getContext("webgl", { antialias:false, depth:false, stencil:false, powerPreference:"high-performance" })
+        || canvas.getContext("experimental-webgl");
+if(!gl){ document.getElementById("err").style.display = "grid"; throw new Error("no webgl"); }
+
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+    console.error(gl.getShaderInfoLog(s));
+    document.getElementById("err").style.display = "grid";
+    throw new Error("shader");
+  }
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, "aPos");
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const U = {};
+["uRes","uTime","uPos","uYP","uRoll","uGlass","uFogD","uCyc","uAudio","uExpo",
+ "uFogCol","uLightCol","uAmbCol","uTint","uTex"].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+
+/* ===================== textura del vitral ===================== */
+const tex = gl.createTexture();
+gl.activeTexture(gl.TEXTURE0);
+gl.bindTexture(gl.TEXTURE_2D, tex);
+gl.uniform1i(U.uTex, 0);
+
+let tint = [0.35, 0.3, 0.55];
+
+function uploadTexture(source){
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, source);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  /* color medio → tiñe la luz de la escena */
+  const c1 = document.createElement("canvas"); c1.width = c1.height = 16;
+  const x1 = c1.getContext("2d");
+  x1.drawImage(source, 0, 0, 16, 16);
+  const d = x1.getImageData(0, 0, 16, 16).data;
+  let r = 0, g = 0, b = 0;
+  for(let i = 0; i < d.length; i += 4){ r += d[i]; g += d[i+1]; b += d[i+2]; }
+  const n = d.length / 4;
+  tint = [Math.max(r/n/255, .06), Math.max(g/n/255, .06), Math.max(b/n/255, .06)];
+  const mx = Math.max(tint[0], tint[1], tint[2]);
+  tint = tint.map(v => Math.pow(v / mx, 0.8) * 0.9); // normaliza y satura un poco
+}
+
+/* mosaico de vitral por defecto: azules, violetas, ámbar, granate */
+function makeDefaultGlass(){
+  const S = 1024, c = document.createElement("canvas");
+  c.width = c.height = S;
+  const x = c.getContext("2d");
+  x.fillStyle = "#07060d"; x.fillRect(0, 0, S, S);
+  const pal = ["#1c3fae","#2b2d9e","#4a1f9c","#6d2a9e","#d98e2b","#b06a1e","#8c1f2f","#6e1626","#1f6f8c","#233a86"];
+  const N = 13, cell = S / N;
+  const rnd = (i, j, k) => { const v = Math.sin(i*127.1 + j*311.7 + k*74.7) * 43758.5453; return v - Math.floor(v); };
+  const px = (i, j) => [ i*cell + (rnd(i,j,1) - .5)*cell*.7, j*cell + (rnd(i,j,2) - .5)*cell*.7 ];
+  for(let i = 0; i < N; i++) for(let j = 0; j < N; j++){
+    const p00 = px(i,j), p10 = px(i+1,j), p11 = px(i+1,j+1), p01 = px(i,j+1);
+    const col = pal[Math.floor(rnd(i,j,3) * pal.length)];
+    const tris = [[p00,p10,p11],[p00,p11,p01]];
+    for(let k = 0; k < 2; k++){
+      x.beginPath();
+      x.moveTo(tris[k][0][0], tris[k][0][1]);
+      x.lineTo(tris[k][1][0], tris[k][1][1]);
+      x.lineTo(tris[k][2][0], tris[k][2][1]);
+      x.closePath();
+      const sh = 0.75 + rnd(i,j,4+k) * 0.55;
+      x.fillStyle = col;
+      x.globalAlpha = 1; x.fill();
+      x.globalAlpha = 1 - Math.min(sh,1); x.fillStyle = "#000"; x.fill();
+      x.globalAlpha = 1;
+      x.strokeStyle = "#0b0910"; x.lineWidth = 7; x.lineJoin = "round"; x.stroke();
+    }
+  }
+  const g = x.createRadialGradient(S/2, S/2, S*0.08, S/2, S/2, S*0.7);
+  g.addColorStop(0, "rgba(255,240,210,0.28)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  x.fillStyle = g; x.fillRect(0, 0, S, S);
+  return c;
+}
+uploadTexture(makeDefaultGlass());
+
+/* subida de foto del usuario */
+const fileIn = document.getElementById("fileIn");
+const photoState = document.getElementById("photoState");
+fileIn.addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0];
+  if(!f) return;
+  const img = new Image();
+  img.onload = () => {
+    const S = 1024, c = document.createElement("canvas");
+    c.width = c.height = S;
+    const x = c.getContext("2d");
+    const r = Math.max(S / img.width, S / img.height); // cover
+    const w = img.width * r, h = img.height * r;
+    try{ x.filter = "saturate(1.35) contrast(1.08)"; }catch(_){}
+    x.drawImage(img, (S - w)/2, (S - h)/2, w, h);
+    uploadTexture(c);
+    photoState.classList.add("show");
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(f);
+});
+document.getElementById("resetPhoto").addEventListener("click", () => {
+  uploadTexture(makeDefaultGlass());
+  photoState.classList.remove("show");
+  fileIn.value = "";
+});
+
+/* ==================== ambientes (presets) ==================== */
+const PRESETS = [
+  { // Amanecer
+    fogCol:[0.62,0.40,0.36], lightCol:[1.00,0.85,0.68], ambCol:[0.26,0.19,0.22],
+    fogBase:0.050, expo:1.12, glassMul:1.00 },
+  { // Medianoche
+    fogCol:[0.030,0.050,0.130], lightCol:[0.55,0.65,1.00], ambCol:[0.050,0.070,0.160],
+    fogBase:0.055, expo:1.22, glassMul:1.35 },
+  { // Ámbar
+    fogCol:[0.150,0.075,0.028], lightCol:[1.00,0.62,0.30], ambCol:[0.150,0.080,0.040],
+    fogBase:0.060, expo:1.15, glassMul:1.10 },
+  { // Etéreo
+    fogCol:[0.50,0.57,0.68], lightCol:[0.95,0.97,1.00], ambCol:[0.36,0.40,0.48],
+    fogBase:0.100, expo:1.05, glassMul:0.90 },
+];
+const cur = JSON.parse(JSON.stringify(PRESETS[1]));   // estado suavizado
+let target = PRESETS[1];
+
+const chips = [...document.querySelectorAll(".chip")];
+chips.forEach(ch => ch.addEventListener("click", () => {
+  chips.forEach(o => o.classList.remove("active"));
+  ch.classList.add("active");
+  target = PRESETS[+ch.dataset.p];
+  ch.blur();
+}));
+
+/* ======================== estado / input ======================== */
+const S = {
+  speed: 1.6, glass: 1.2, fogMul: 1.0, cycSpeed: 0.25,
+  moving: true,
+  yaw: 0, pitch: 0, yawT: 0, pitchT: 0,
+  offX: 0, offY: 0, z: 0,
+  cyc: 0, audio: 0, audioT: 0,
+};
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+if(reduceMotion) S.speed = 0.8;
+
+const $ = id => document.getElementById(id);
+const sliders = {
+  sSpeed: v => { S.speed = v; $("vSpeed").textContent = v.toFixed(1); },
+  sGlass: v => { S.glass = v; $("vGlass").textContent = v.toFixed(2); },
+  sFog:   v => { S.fogMul = v; $("vFog").textContent = v.toFixed(2); },
+  sCyc:   v => { S.cycSpeed = v; $("vCyc").textContent = v.toFixed(2); },
+};
+for(const id in sliders){
+  $(id).addEventListener("input", e => sliders[id](parseFloat(e.target.value)));
+  sliders[id](parseFloat($(id).value));
+}
+if(reduceMotion){ $("sSpeed").value = S.speed; $("vSpeed").textContent = S.speed.toFixed(1); }
+
+/* ratón: mirar alrededor */
+let lastMove = performance.now();
+function look(nx, ny){
+  S.yawT   = -nx * 1.05;
+  S.pitchT =  ny * 0.55;
+}
+addEventListener("pointermove", e => {
+  lastMove = performance.now();
+  document.body.classList.remove("nocursor");
+  panel.classList.remove("idle");
+  look(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1);
+});
+addEventListener("touchmove", e => {
+  if(e.touches.length){
+    const t0 = e.touches[0];
+    look(t0.clientX / innerWidth * 2 - 1, t0.clientY / innerHeight * 2 - 1);
+  }
+}, { passive:true });
+
+/* rueda: velocidad */
+addEventListener("wheel", e => {
+  S.speed = Math.min(8, Math.max(0, S.speed - e.deltaY * 0.003));
+  $("sSpeed").value = S.speed;
+  $("vSpeed").textContent = S.speed.toFixed(1);
+  if(S.speed > 0.01) S.moving = true;
+}, { passive:true });
+
+/* teclado */
+const keys = {};
+addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if(e.target.tagName === "INPUT" && e.target.type !== "range" && k !== "escape") return;
+  if(k === " "){ S.moving = !S.moving; e.preventDefault(); }
+  else if(k === "f"){
+    if(document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(()=>{});
+  }
+  else if(k === "h"){ panel.classList.toggle("hidden"); }
+  else keys[k] = true;
+});
+addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+
+/* micrófono opcional */
+let micOn = false, analyser = null, micData = null, audioCtx = null;
+const micBtn = $("micBtn");
+micBtn.addEventListener("click", async () => {
+  if(micOn){
+    micOn = false; micBtn.classList.remove("on"); micBtn.textContent = "Micrófono";
+    if(audioCtx){ audioCtx.suspend(); }
+    return;
+  }
+  try{
+    if(!analyser){
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = audioCtx.createMediaStreamSource(stream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      micData = new Uint8Array(analyser.fftSize);
+      src.connect(analyser);
+    }
+    if(audioCtx.state === "suspended") await audioCtx.resume();
+    micOn = true; micBtn.classList.add("on"); micBtn.textContent = "Escuchando";
+  }catch(err){
+    micBtn.textContent = "Mic no disponible";
+    setTimeout(() => micBtn.textContent = "Micrófono", 2500);
+  }
+  micBtn.blur();
+});
+
+/* ===================== cámara: límites de la nave ===================== */
+function halfWidth(y){
+  if(y <= 3.0) return 2.4;
+  const dy = y - 3.0;
+  return Math.max(Math.sqrt(Math.max(3.7*3.7 - dy*dy, 0)) - 1.3, 0.15);
+}
+
+/* ===================== resolución adaptativa ===================== */
+const panel = $("panel");
+let baseScale = Math.min(devicePixelRatio || 1, 1.5);
+let scale = baseScale;
+function resize(){
+  canvas.width  = Math.max(2, Math.round(innerWidth  * scale));
+  canvas.height = Math.max(2, Math.round(innerHeight * scale));
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+addEventListener("resize", resize);
+resize();
+
+/* =========================== bucle =========================== */
+const lerp = (a, b, k) => a + (b - a) * k;
+let prev = performance.now(), ema = 16, frames = 0, speedSm = 0;
+
+function frame(now){
+  const dt = Math.min((now - prev) / 1000, 0.05);
+  const ms = now - prev;
+  prev = now;
+  ema = ema * 0.94 + ms * 0.06;
+  frames++;
+  if(frames % 45 === 0){
+    if(ema > 19 && scale > 0.55){ scale *= 0.9; resize(); }
+    else if(ema < 12.5 && scale < baseScale){ scale = Math.min(scale * 1.06, baseScale); resize(); }
+  }
+
+  /* suavizado de presets */
+  const pk = 1 - Math.exp(-dt * 2.4);
+  ["fogCol","lightCol","ambCol"].forEach(n => {
+    for(let i = 0; i < 3; i++) cur[n][i] = lerp(cur[n][i], target[n][i], pk);
+  });
+  cur.fogBase  = lerp(cur.fogBase,  target.fogBase,  pk);
+  cur.expo     = lerp(cur.expo,     target.expo,     pk);
+  cur.glassMul = lerp(cur.glassMul, target.glassMul, pk);
+
+  /* mirada suave */
+  const lk = 1 - Math.exp(-dt * 4.2);
+  S.yaw   = lerp(S.yaw,   S.yawT,   lk);
+  S.pitch = lerp(S.pitch, S.pitchT, lk);
+
+  /* avance automático + WASD */
+  const targetSpeed = S.moving ? S.speed : 0;
+  speedSm = lerp(speedSm, targetSpeed, 1 - Math.exp(-dt * 3));
+  S.z += speedSm * dt;
+
+  const mv = 4.0 * dt;
+  const cyaw = Math.cos(S.yaw), syaw = Math.sin(S.yaw);
+  const cpit = Math.cos(S.pitch), spit = Math.sin(S.pitch);
+  const fwd = [-syaw * cpit, -spit, cyaw * cpit];
+  const rgt = [ cyaw, 0, syaw];
+  if(keys["w"] || keys["arrowup"])    { S.offX += fwd[0]*mv; S.offY += fwd[1]*mv; S.z += fwd[2]*mv; }
+  if(keys["s"] || keys["arrowdown"])  { S.offX -= fwd[0]*mv; S.offY -= fwd[1]*mv; S.z -= fwd[2]*mv; }
+  if(keys["d"] || keys["arrowright"]) { S.offX += rgt[0]*mv; S.z += rgt[2]*mv; }
+  if(keys["a"] || keys["arrowleft"])  { S.offX -= rgt[0]*mv; S.z -= rgt[2]*mv; }
+
+  /* balanceo cinematográfico + límites de la nave */
+  const T = now / 1000;
+  const swayA = reduceMotion ? 0 : 1;
+  const sx = Math.sin(T * 0.11) * 0.30 * swayA;
+  const sy = Math.sin(T * 0.07) * 0.12 * swayA;
+  let py = Math.min(Math.max(S.offY + 1.7 + sy, 0.7), 5.9);
+  S.offY = Math.min(Math.max(S.offY, -1.0), 4.2);
+  const hw = halfWidth(py) - 0.45;
+  let px = Math.min(Math.max(S.offX + sx, -hw), hw);
+  S.offX = Math.min(Math.max(S.offX, -hw), hw);
+  const roll = swayA * (Math.sin(T * 0.09) * 0.02 + (S.yawT - S.yaw) * 0.06);
+
+  /* ciclo de color */
+  S.cyc += dt * 0.35 * S.cycSpeed;
+
+  /* micrófono */
+  if(micOn && analyser){
+    analyser.getByteTimeDomainData(micData);
+    let sum = 0;
+    for(let i = 0; i < micData.length; i += 4){ const v = (micData[i] - 128) / 128; sum += v * v; }
+    S.audioT = Math.min(Math.sqrt(sum / (micData.length / 4)) * 3.2, 1.2);
+  } else S.audioT = 0;
+  S.audio = lerp(S.audio, S.audioT, 1 - Math.exp(-dt * 6));
+
+  /* panel en reposo + cursor oculto */
+  const idleFor = now - lastMove;
+  if(idleFor > 4000 && !panel.classList.contains("hidden")) panel.classList.add("idle");
+  if(idleFor > 3000) document.body.classList.add("nocursor");
+  if(idleFor > 7000) $("hint").classList.add("gone");
+
+  /* uniforms + draw */
+  gl.uniform2f(U.uRes, canvas.width, canvas.height);
+  gl.uniform1f(U.uTime, T);
+  gl.uniform3f(U.uPos, px, py, S.z);
+  gl.uniform2f(U.uYP, S.yaw, S.pitch);
+  gl.uniform1f(U.uRoll, roll);
+  gl.uniform1f(U.uGlass, S.glass * cur.glassMul);
+  gl.uniform1f(U.uFogD, cur.fogBase * S.fogMul);
+  gl.uniform1f(U.uCyc, S.cyc);
+  gl.uniform1f(U.uAudio, S.audio);
+  gl.uniform1f(U.uExpo, cur.expo);
+  gl.uniform3fv(U.uFogCol, cur.fogCol);
+  gl.uniform3fv(U.uLightCol, cur.lightCol);
+  gl.uniform3fv(U.uAmbCol, cur.ambCol);
+  gl.uniform3fv(U.uTint, tint);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+setTimeout(() => $("hint").classList.add("gone"), 11000);
+</script>
+</body>
+</html>
