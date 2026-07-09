@@ -6,7 +6,7 @@ Una catedral gótica fractal e infinita, renderizada en tiempo real con **raymar
 
 🔗 **Demo en vivo:** 
 
-![Captura de la catedral](prueba_Catedral.jpg)
+![Captura de la catedral](prueba_Catedral.png)
 
 ## Qué hace
 
